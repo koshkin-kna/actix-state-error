@@ -8,12 +8,12 @@ use actix_web::http::{ContentEncoding, Method, NormalizePath, StatusCode};
 use actix_web::{fs, middleware, pred, server, App, HttpRequest, HttpResponse};
 use std::env;
 
-pub struct AppState {
-    template: tera::Tera,
+pub struct AppState<'a> {
+    template: &'a tera::Tera,
 }
 
 
-fn index(_req: HttpRequest<AppState>) -> HttpResponse {
+fn index(_req: HttpRequest<&mut AppState>) -> HttpResponse {
 
     let mut m = &_req.state().template;
    // m.full_reload().unwrap();
@@ -31,7 +31,7 @@ fn index(_req: HttpRequest<AppState>) -> HttpResponse {
         .body(s)
 }
 
-fn p404(_req: HttpRequest<AppState>) -> HttpResponse {
+fn p404(_req: HttpRequest<&mut AppState>) -> HttpResponse {
     let mut context = tera::Context::new();
     context.add("vat_rate", &0.20);
     let s = _req.state().template.render("404.html", &context).unwrap();
@@ -49,7 +49,7 @@ fn main() {
     let sys = actix::System::new("ultimate");
   
     let _addr = server::new(|| {
-        App::with_state(AppState {
+        App::with_state(&mut AppState {
             template: compile_templates!("./src/templates/**/*"),
         }).middleware(middleware::Logger::default())
             .resource("/", |r| r.f(index))
