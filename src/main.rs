@@ -3,63 +3,20 @@ extern crate actix_web;
 extern crate env_logger;
 #[macro_use] extern crate tera;
 
-use actix_web::http::{ContentEncoding, Method, NormalizePath, StatusCode};
-use actix_web::{fs, middleware, pred, server, App, HttpRequest, HttpResponse};
-use std::env;
-use std::cell::RefCell;
+#[cfg(debug_assertions)] use std::env;
+use actix_web::server;
 
-pub struct AppState {
-    template: RefCell<tera::Tera>
-}
-
-fn index(_req: HttpRequest<AppState>) -> HttpResponse {
-    let mut m = _req.state().template.borrow_mut();
-    m.full_reload().unwrap();
-    let mut context = tera::Context::new();
-    context.add("vat_rate", &0.20);
-    let s = m
-        .render("admin/login.html", &context)
-        .unwrap();
-    HttpResponse::Ok()
-        .content_encoding(ContentEncoding::Gzip)
-        .content_type("text/html; charset=utf-8")
-        .body(s)
-}
-
-fn p404(_req: HttpRequest<AppState>) -> HttpResponse {
-    let mut m = _req.state().template.borrow_mut();
-    m.full_reload().unwrap();
-    let context = tera::Context::new();
-    let s = m.render("404.html", &context).unwrap();
-    HttpResponse::build(StatusCode::NOT_FOUND)
-        .content_encoding(ContentEncoding::Gzip)
-        .content_type("text/html")
-        .body(s)
-}
+pub mod app;
 
 fn main() {
-    env::set_var("RUST_LOG", "actix_web=debug");
-    env::set_var("RUST_BACKTRACE", "0");
-    env_logger::init();
+    #[cfg(debug_assertions)] {
+        env::set_var("RUST_LOG", "actix_web=debug");
+        env::set_var("RUST_BACKTRACE", "0");
+        env_logger::init();
+    }
     let sys = actix::System::new("ultimate");
-    let _addr = server::new(|| {
-        App::with_state(AppState {
-            template: RefCell::new(compile_templates!("./src/templates/**/*")),
-        }).middleware(middleware::Logger::default())
-            .resource("/", |r| r.f(index))
-            .resource("/{test}/", |r| r.f(index))
-            .handler(
-                "/static",
-                fs::StaticFiles::new("./src/static/build").show_files_listing(),
-            )
-            .default_resource(|r| {
-                r.method(Method::GET).f(p404);
-                r.route()
-                    .filter(pred::Not(pred::Get()))
-                    .f(|_req| HttpResponse::MethodNotAllowed());
-                r.h(NormalizePath::default());
-            })
-    }).bind("127.0.0.1:8000")
+    let _addr = server::new(|| app::create_app())
+        .bind("127.0.0.1:8000")
         .expect("Can not bind to 127.0.0.1:8000")
         .start();
     let _ = sys.run();
